@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GeoFS FMC Route and display generator
 // @namespace    http://tampermonkey.net/
-// @version      v0.1
+// @version      v0.2
 // @description  Adds a simple FMC pop-up UI and draws your flight plan on the Nav panel.
 // @author       GGamerGGuy
 // @match        https://www.geo-fs.com/geofs.php?v=*
@@ -79,6 +79,20 @@
     getData4();
     console.log("Nav databases 3 and 4 are provided by https://openaip.net");
 
+    window.cpa002FlightPlan = async function() { //I see CPA002 create more of these than anyone else, and idk what else to call the function. The function itself adds points on the map when given a string containing the FMC JSON format.
+        let cpaText = document.getElementById("cpa").value;
+        let flp = JSON.parse(cpaText);
+        let ret = [];
+        for (let i = 0; i < flp[3].length; i++) {
+            ret.push([flp[3][i][1], flp[3][i][2]]); //flp[3][i][1] is the latitude coordinate for each waypoint and flp[3][i][2] is the longitude coordinate for each waypoint
+        }
+        if (!geofs.api.map.flightPathOn) {
+            geofs.api.map.createPath();
+        }
+        geofs.api.map.setPathPoints(ret);
+        geofs.api.map.stopCreatePath();
+    }
+
     window.simbriefFlightPlan = async function(flp) {
         let parser = new DOMParser();
         let xmlDoc = parser.parseFromString(flp, "text/xml");
@@ -133,10 +147,6 @@
                 window.encodedRoute += `["${window.sbNames[i]}",${window.sbCoords[i][0]},${window.sbCoords[i][1]},null,false,null],`;
             } else {
                 window.encodedRoute += `["${window.sbNames[i]}",${window.sbCoords[i][0]},${window.sbCoords[i][1]},${window.sbCoords[i][2]},false,null],`;
-                //Add waypoints to map
-                //let m = geofs.api.map.getPathPoints();
-                //geofs.api.map.setPathPoints(m.push([window.sbCoords[i][0], window.sbCoords[i][1]]));
-                //geofs.api.map.flightPath({ lat: window.sbCoords[i][0], lng: window.sbCoords[i][1]});
                 window.gFSmapCoords.push([window.sbCoords[i][0], window.sbCoords[i][1]]);
                 console.log("Added point " + window.sbNames[i] + "at" + window.sbCoords[i]);
             }
@@ -169,6 +179,8 @@
             window.fltPlnDiv.style.background = "white";
             window.fltPlnDiv.style.left = "30%";
             window.fltPlnDiv.style.right = "30%";
+            window.fltPlnDiv.style.overflow = "scroll";
+            window.fltPlnDiv.style.paddingBottom = "2%";
             window.fltPlnDiv.classList = "geofs-stopKeyboardPropagation";
             document.body.appendChild(window.fltPlnDiv);
         }
@@ -200,6 +212,11 @@
     <p style="width: 250px">Or, upload a SimBrief file (scroll down to Flight Plan Downloads and click "Download" next to the FS2020 format) for automatic flight plan entry.</p>
     <input type="file" id="sbFileUpload"><br>
     <button id="sbSubmit" onclick="window.submitSBPlan()">Submit SimBrief flight plan</button>
+    <br>
+    <br>
+    <p style="width: 250px">Or, paste in a route in the format with all of the brackets to show the route on the map.</p>
+    <input class="geofs-preferences-key-detect mdl-textfield__input is-focused" data-bind=", mdlTextfield:true" style="width: fit content;" id="cpa"><br>
+    <button id="cpaSubmit" onclick="window.cpa002FlightPlan()">Submit Route</button>
     </fieldset>` :
    `<fieldset>
     <button style="right: 0px; position: absolute; background: none; border: none; cursor: pointer;" onclick="window.closeFMCPopup()">X</button>
@@ -228,6 +245,11 @@
     <p style="width: 250px">Or, upload a SimBrief file (scroll down to Flight Plan Downloads and click "Download" next to the FS2020 format) for automatic flight plan entry.</p>
     <input type="file" id="sbFileUpload"><br>
     <button id="sbSubmit" onclick="window.submitSBPlan()" style="color: gray">Submit SimBrief flight plan</button>
+    <br>
+    <br>
+    <p style="width: 250px">Or, paste in a route in the format with all of the brackets to show the route on the map.</p>
+    <input class="geofs-preferences-key-detect mdl-textfield__input is-focused" data-bind=", mdlTextfield:true" style="width: fit content;" id="cpa"><br>
+    <button id="cpaSubmit" onclick="window.cpa002FlightPlan()" style="color: gray">Submit Route</button>
     </fieldset>
     `;
     }
