@@ -179,11 +179,11 @@
             window.fltPlnDiv.style.background = "white";
             window.fltPlnDiv.style.left = "30%";
             window.fltPlnDiv.style.right = "30%";
-            window.fltPlnDiv.style.overflow = "scroll";
             window.fltPlnDiv.style.paddingBottom = "2%";
             window.fltPlnDiv.classList = "geofs-stopKeyboardPropagation";
             document.body.appendChild(window.fltPlnDiv);
         }
+        window.fltPlnDiv.style.overflow = "scroll";
         window.fltPlnDiv.innerHTML = window.databaseInited ? //The difference is the submit button color, in case you were wondering.
             `<fieldset>
     <button style="right: 0px; position: absolute; background: none; border: none; cursor: pointer;" onclick="window.closeFMCPopup()">X</button>
@@ -383,5 +383,6 @@ window.getFixCoords = async function(theName) { //Function to get the coordinate
         }
     window.closeFMCPopup = function() {
         window.fltPlnDiv.innerHTML = ``;
+        window.fltPlnDiv.style.overflow = "default";
     }
 })();
