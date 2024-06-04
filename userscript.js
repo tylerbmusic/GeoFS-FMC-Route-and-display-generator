@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GeoFS FMC Route and display generator
 // @namespace    http://tampermonkey.net/
-// @version      v0.2
+// @version      v0.2.5
 // @description  Adds a simple FMC pop-up UI and draws your flight plan on the Nav panel.
 // @author       GGamerGGuy
 // @match        https://www.geo-fs.com/geofs.php?v=*
@@ -12,6 +12,8 @@
 
 (function() {
     'use strict';
+    window.apprOn = false;
+    window.glideslopeBelow = false;
     window.databaseInited = false;
     var bottomDiv = document.getElementsByClassName('geofs-ui-bottom')[0];
         window.fltPlnBtn = document.createElement('div');
@@ -19,6 +21,16 @@
         window.fltPlnBtn.classList = 'mdl-button';
         bottomDiv.appendChild(window.fltPlnBtn);
     window.fltPlnBtn.innerHTML = `<button class="mdl-button" onclick="window.openFMCPopup()">FLIGHT PLAN</button>`
+
+    window.apprBtn = document.createElement('button');
+    window.apprBtn.setAttribute("onclick", "(function() {window.apprOn = !window.apprOn;})()");
+    window.apprBtn.classList = "mdl-button";
+    bottomDiv.appendChild(window.apprBtn);
+    window.apprBtn.innerHTML = `APPR`;
+    /*window.extraDiv = document.createElement('div');
+    window.extraDiv.classList = 'mdl-button';
+    bottomDiv.appendChild(window.extraDiv);*/
+
         let url = "https://tylerbmusic.github.io/GPWS-files_geofs/navaids.gpx"; //first DB
         fetch(url).then(response => response.text()).then(gpxData => {
             let parser = new DOMParser();
@@ -313,7 +325,7 @@ window.getFixCoords = async function(theName) { //Function to get the coordinate
         console.warn(`Our databases could not find the waypoint ${theName}.`); //blog it
     } else if (namesArray.length == 1) { //If the names array only has one thing,
         console.log(`${theName} has the coordinates ${coordsArray[0]} and a name of ${namesArray[0]}`); //That one thing must be it
-        window.result = coordsArray[0]
+        window.result = coordsArray[0];
     } else { //If the length isn't 0 or 1,
         let tMsg = "There are multiple waypoints in the databases for " + theName + ". Type the number of the correct database or -1 if the waypoint isn't on the list:\n"; //Set a message variable to the start of the prompt
         for (var i = 0; i < namesArray.length; i++) { //loop through each waypoint
@@ -382,7 +394,52 @@ window.getFixCoords = async function(theName) { //Function to get the coordinate
             console.log(encodedRte);
         }
     window.closeFMCPopup = function() {
+        window.fltPlnDiv.style.overflow = 'initial';
         window.fltPlnDiv.innerHTML = ``;
-        window.fltPlnDiv.style.overflow = "default";
     }
+
+    window.apprMode = async function() {
+        if (!geofs.pause && window.apprOn && !geofs.aircraft.instance.groundContact) {
+            var agl = (geofs.animation.values.altitude !== undefined && geofs.animation.values.groundElevationFeet !== undefined) ? Math.round((geofs.animation.values.altitude - geofs.animation.values.groundElevationFeet) + (geofs.aircraft.instance.collisionPoints[geofs.aircraft.instance.collisionPoints.length - 2].worldPosition[2]*3.2808399)) : 'N/A';
+            var glideslope;
+            if (geofs.animation.getValue("NAV1Direction") && (geofs.animation.getValue("NAV1Distance") !== geofs.runways.getNearestRunway([geofs.nav.units.NAV1.navaid.lat,geofs.nav.units.NAV1.navaid.lon,0]).lengthMeters*0.185)) { //The second part to the if statement prevents the divide by 0 error.
+                glideslope = (geofs.animation.getValue("NAV1Direction") === "to") ? (Math.atan(((geofs.animation.values.altitude/3.2808399+(geofs.aircraft.instance.collisionPoints[geofs.aircraft.instance.collisionPoints.length - 2].worldPosition[2]+0.1))-geofs.nav.units.NAV1.navaid.elevation) / (geofs.animation.getValue("NAV1Distance")+geofs.runways.getNearestRunway([geofs.nav.units.NAV1.navaid.lat,geofs.nav.units.NAV1.navaid.lon,0]).lengthMeters*0.185))*RAD_TO_DEGREES) : (Math.atan(((geofs.animation.values.altitude/3.2808399+(geofs.aircraft.instance.collisionPoints[geofs.aircraft.instance.collisionPoints.length - 2].worldPosition[2]+0.1))-geofs.nav.units.NAV1.navaid.elevation) / Math.abs(geofs.animation.getValue("NAV1Distance")-geofs.runways.getNearestRunway([geofs.nav.units.NAV1.navaid.lat,geofs.nav.units.NAV1.navaid.lon,0]).lengthMeters*0.185))*RAD_TO_DEGREES);
+            } else {
+                glideslope = 'N/A';
+            }
+            window.gVS = (geofs.animation.values.groundSpeedKnt*101.27) * Math.tan(-3*DEGREES_TO_RAD); //glideslopeVerticalSpeed  1 kt = 101.27 fpm
+            if (geofs.animation.getValue("NAV1Distance")) {
+                window.glideDeviation = glideslope - 3;
+                if (window.glideDeviation < 0) {
+                    window.requiredVS = 0;
+                } else if (glideDeviation > 0.1) {
+                    window.requiredVS = window.gVS - 200;
+                } else {
+                    window.requiredVS = window.gVS;
+                }
+                    if (geofs.animation.values.verticalSpeed < window.requiredVS) {
+                        if (geofs.animation.values.accZ < 10.1) { //If the VS dial is moving up by more than 9.8 units
+                            controls.elevatorTrim += 0.01;
+                        } else if (geofs.animation.values.accZ > 10.12) {
+                            controls.elevatorTrim -= 0.01;
+                        }
+                    } else if (geofs.animation.values.verticalSpeed > window.requiredVS) {
+                        if (geofs.animation.values.accZ < 9.4) {
+                            controls.elevatorTrim += 0.01;
+                        } else if (geofs.animation.values.accZ > 9.42) {
+                            controls.elevatorTrim -= 0.01;
+                        }
+                    }
+                if (!geofs.autopilot.on) {
+                    let navaid = geofs.nav.addGPSFIX([geofs.nav.units.NAV1.navaid.lat, geofs.nav.units.NAV1.navaid.lon]);
+                    geofs.nav.selectNavaid(navaid.id);
+                    geofs.autopilot.turnOn();
+                    geofs.autopilot.setMode("NAV");
+                    geofs.nav.units.GPS.OBS = geofs.nav.units.NAV1.course;
+                    geofs.autopilot.setAltitude(null);
+                }
+            }
+        }
+    }
+    setInterval(window.apprMode, 50);
 })();
